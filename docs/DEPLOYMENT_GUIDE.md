@@ -32,6 +32,38 @@ sudo apt update
 sudo apt install -y git curl build-essential python3 make g++ nginx
 ```
 
+Dependencias de runtime do Chrome/Puppeteer (obrigatorio para WhatsApp):
+
+```bash
+sudo apt update
+sudo apt install -y \
+  ca-certificates \
+  fonts-liberation \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libcups2 \
+  libdbus-1-3 \
+  libdrm2 \
+  libgbm1 \
+  libglib2.0-0 \
+  libgtk-3-0 \
+  libnspr4 \
+  libnss3 \
+  libx11-6 \
+  libx11-xcb1 \
+  libxcb1 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxext6 \
+  libxfixes3 \
+  libxkbcommon0 \
+  libxrandr2 \
+  xdg-utils
+```
+
+Nota para Ubuntu 24+: em alguns ambientes o pacote pode ser `libasound2t64`.
+
 ## 3. Instalar Node.js 18+
 
 Exemplo com NodeSource (Node 20 LTS):
@@ -92,8 +124,23 @@ WHATSAPP_ENABLED=true
 WHATSAPP_AUTH_PATH=./.wwebjs_auth
 WHATSAPP_CLIENT_ID=central-notificacoes
 WHATSAPP_DEFAULT_COUNTRY_CODE=55
+WHATSAPP_EXECUTABLE_PATH=
 WHATSAPP_HEADLESS=true
 WHATSAPP_NO_SANDBOX=true
+```
+
+Opcional (recomendado em producao): instalar o Chromium do sistema e apontar o executavel.
+
+```bash
+sudo apt install -y chromium-browser || sudo apt install -y chromium
+```
+
+Depois, configure no `.env` (um dos caminhos abaixo):
+
+```env
+WHATSAPP_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# ou
+WHATSAPP_EXECUTABLE_PATH=/usr/bin/chromium
 ```
 
 ## 6. Primeira inicializacao (WhatsApp)
@@ -213,3 +260,22 @@ cp data/notifications.sqlite3 /opt/backups/central-notificacoes/notifications-$(
 - WhatsApp sem enviar: confira estado em `/health` e logs em `logs/processing.log`.
 - Erro de sessao do browser: garanta somente 1 instancia da API rodando.
 - Falha de email: valide `SMTP_USER`, `SMTP_PASS` e senha de app do provedor.
+
+### Erro: `Failed to launch the browser process` + `libatk-1.0.so.0`
+
+Esse erro indica dependencia nativa faltando no Linux para o Chrome do Puppeteer.
+
+1. Instale as dependencias de runtime do Chrome (secao 2).
+2. Opcionalmente instale Chromium do sistema e configure `WHATSAPP_EXECUTABLE_PATH`.
+3. Reinicie o processo:
+
+```bash
+pm2 restart central-notificacoes
+```
+
+4. Se ainda falhar, identifique bibliotecas faltantes:
+
+```bash
+ldd ~/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome | grep 'not found'
+```
+

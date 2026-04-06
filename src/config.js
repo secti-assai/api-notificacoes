@@ -62,6 +62,7 @@ const config = {
     authPath: resolveProjectPath(process.env.WHATSAPP_AUTH_PATH, "./.wwebjs_auth"),
     clientId: process.env.WHATSAPP_CLIENT_ID || "central-notificacoes",
     defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || "55",
+    executablePath: process.env.WHATSAPP_EXECUTABLE_PATH || "",
     headless: toBoolean(process.env.WHATSAPP_HEADLESS, true),
     noSandbox: toBoolean(process.env.WHATSAPP_NO_SANDBOX, true)
   }

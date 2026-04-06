@@ -145,15 +145,21 @@ function pickFirstResolvedIdFromLidLookup(entries) {
 }
 
 function createClient() {
+  const puppeteerOptions = {
+    headless: config.whatsapp.headless,
+    args: buildPuppeteerArgs()
+  };
+
+  if (config.whatsapp.executablePath) {
+    puppeteerOptions.executablePath = config.whatsapp.executablePath;
+  }
+
   const nextClient = new Client({
     authStrategy: new LocalAuth({
       dataPath: config.whatsapp.authPath,
       clientId: config.whatsapp.clientId
     }),
-    puppeteer: {
-      headless: config.whatsapp.headless,
-      args: buildPuppeteerArgs()
-    }
+    puppeteer: puppeteerOptions
   });
 
   nextClient.on("qr", (qr) => {
