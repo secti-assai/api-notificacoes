@@ -20,6 +20,7 @@ WhatsApp ou E-mail de forma agendada.
 
 - Guia tecnico de desenvolvimento: `docs/DEVELOPER_GUIDE.md`
 - Guia de deploy em producao: `docs/DEPLOYMENT_GUIDE.md`
+- Guia de integracao para sistemas externos: `docs/INTEGRATION_GUIDE.md`
 
 ## Como rodar
 
