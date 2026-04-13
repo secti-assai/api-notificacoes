@@ -393,6 +393,24 @@ async function processDueNotifications() {
         `[worker] Dispatching id=${notification.id} type=${notification.type} recipient=${notification.recipient} attempt=${notification.attempts + 1}`
       );
 
+      // --- ANTISPAM: Limitação de envio e variabilidade para WhatsApp ---
+      if (notification.type === "whatsapp") {
+        // 1. Variabilidade (Spintax / Zero-width characters)
+        // Adiciona um conjunto aleatório de caracteres de espaço-zero (invisíveis)
+        // para que o hash da mensagem seja sempre diferente.
+        const zeroWidthChars = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
+        const randomInvisibleSequence = Array.from({ length: 5 }, () => 
+          zeroWidthChars[Math.floor(Math.random() * zeroWidthChars.length)]
+        ).join('');
+        notification.body = notification.body + randomInvisibleSequence;
+
+        // 2. Atraso Aleatório (Delay)
+        // Esperar entre 15 a 30 segundos entre cada envio do WhatsApp
+        const delayMs = Math.floor(Math.random() * (30000 - 15000 + 1) + 15000);
+        console.log(`[worker] Anti-spam: Aguardando ${delayMs}ms antes de enviar para ${notification.recipient}...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
       await dispatchNotification(notification);
 
       await db.run(
