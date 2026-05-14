@@ -281,6 +281,7 @@ async function listNotifications(filters = {}) {
 
   const rawStatus = String(filters.status || "").trim().toLowerCase();
   const status = rawStatus || null;
+  const search = String(filters.search || "").trim();
 
   if (status && !SUPPORTED_STATUSES.has(status)) {
     throw buildBadRequest("Query 'status' must be one of: pending, sent, failed");
@@ -288,14 +289,27 @@ async function listNotifications(filters = {}) {
 
   const page = parsePositiveInteger(filters.page, 1, "page");
   const pageSize = parsePositiveInteger(filters.page_size ?? filters.pageSize, 20, "page_size");
-  if (pageSize > 100) {
-    throw buildBadRequest("Query 'page_size' must be <= 100");
+  if (pageSize > 10000) {
+    throw buildBadRequest("Query 'page_size' must be <= 10000");
   }
 
   const offset = (page - 1) * pageSize;
 
-  const whereClause = status ? "WHERE status = ?" : "";
-  const whereParams = status ? [status] : [];
+  const conditions = [];
+  const whereParams = [];
+
+  if (status) {
+    conditions.push("status = ?");
+    whereParams.push(status);
+  }
+
+  if (search) {
+    conditions.push("(recipient LIKE ? OR subject LIKE ? OR body LIKE ?)");
+    const pattern = `%${search}%`;
+    whereParams.push(pattern, pattern, pattern);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const totalRow = await db.get(
     `SELECT COUNT(1) AS total FROM notifications ${whereClause}`,
@@ -339,7 +353,8 @@ async function listNotifications(filters = {}) {
       has_prev: page > 1
     },
     filters: {
-      status
+      status,
+      search
     }
   };
 }
@@ -476,9 +491,158 @@ async function processDueNotifications() {
   return summary;
 }
 
+async function getNotificationStats() {
+  const db = await getDb();
+  
+  const stats = await db.get(`
+    SELECT 
+      COUNT(1) as total,
+      SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+    FROM notifications
+  `);
+
+  return {
+    total: Number(stats.total || 0),
+    sent: Number(stats.sent || 0),
+    failed: Number(stats.failed || 0),
+    pending: Number(stats.pending || 0)
+  };
+}
+
+async function resendNotification(id) {
+  const db = await getDb();
+  
+  const notification = await getNotificationRowById(db, id);
+  if (!notification) {
+    throw buildHttpError(404, "Notification not found");
+  }
+
+  // Reset status to pending and attempts to 0
+  // We keep the original schedule_at but we could also update it to 'now' if preferred.
+  // For a "manual resend", it's usually better to send it as soon as possible.
+  const nowIso = new Date().toISOString();
+
+  await db.run(
+    `
+      UPDATE notifications
+      SET status = 'pending',
+          attempts = 0,
+          last_error = NULL,
+          schedule_at = ?
+      WHERE id = ?
+    `,
+    [nowIso, id]
+  );
+
+  return getNotificationById(id);
+}
+
+async function processAutomaticFollowups() {
+  const db = await getDb();
+  
+  const settings = await getSettings();
+  const delayMinutes = parseInt(settings.followup_delay_minutes) || 5;
+  const followupMessage = settings.followup_message;
+
+  // Find messages older than delayMinutes that haven't been answered or notified yet
+  const unanswered = await db.all(`
+    SELECT id, chat_id, last_message_text 
+    FROM unanswered_messages 
+    WHERE is_answered = 0 
+      AND notified_at IS NULL 
+      AND received_at <= datetime('now', ?)
+    LIMIT 20
+  `, [`-${delayMinutes} minutes`]);
+
+  for (const msg of unanswered) {
+    try {
+      const recipient = msg.chat_id.split('@')[0];
+      
+      await enqueueNotification({
+        type: 'whatsapp',
+        to: recipient,
+        subject: 'Auto-Atendimento',
+        body: followupMessage,
+        schedule_at: new Date().toISOString()
+      }, { apiKeyId: null });
+
+      await db.run(
+        'UPDATE unanswered_messages SET notified_at = datetime(\'now\') WHERE id = ?',
+        [msg.id]
+      );
+      
+      console.log(`[followup] Follow-up enqueued for ${msg.chat_id}`);
+    } catch (err) {
+      console.error(`[followup] Failed to enqueue follow-up for ${msg.chat_id}:`, err);
+    }
+  }
+}
+
+async function getSettings() {
+  const db = await getDb();
+  const rows = await db.all("SELECT key, value FROM settings");
+  return rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+}
+
+async function updateSettings(newSettings) {
+  const db = await getDb();
+  for (const [key, value] of Object.entries(newSettings)) {
+    await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, String(value)]);
+  }
+  return getSettings();
+}
+
+async function resendAllFailedNotifications() {
+  const db = await getDb();
+  
+  const nowIso = new Date().toISOString();
+  
+  const result = await db.run(
+    `
+      UPDATE notifications
+      SET status = 'pending',
+          attempts = 0,
+          last_error = NULL,
+          schedule_at = ?
+      WHERE status = 'failed'
+    `,
+    [nowIso]
+  );
+
+  return {
+    count: result.changes
+  };
+}
+
+async function getDailyStats(days = 7) {
+  const db = await getDb();
+  
+  const stats = await db.all(`
+    SELECT 
+      date(created_at) as date,
+      status,
+      COUNT(*) as count
+    FROM notifications
+    WHERE created_at >= date('now', ?)
+    GROUP BY date, status
+    ORDER BY date ASC
+  `, [`-${days} days`]);
+
+  return stats;
+}
+
 module.exports = {
   enqueueNotification,
   getNotificationById,
   listNotifications,
-  processDueNotifications
+  processDueNotifications,
+  getNotificationStats,
+  resendNotification,
+  processAutomaticFollowups,
+  resendAllFailedNotifications,
+  getDailyStats,
+  getSettings,
+  updateSettings
 };

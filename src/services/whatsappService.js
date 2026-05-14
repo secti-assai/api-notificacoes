@@ -1,6 +1,7 @@
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const config = require("../config");
+const { getDb } = require("../db");
 
 let client;
 let initializePromise;
@@ -189,6 +190,43 @@ function createClient() {
   nextClient.on("disconnected", (reason) => {
     isReady = false;
     console.warn("[whatsapp] Cliente desconectado:", reason);
+  });
+
+  // Track incoming messages from customers
+  nextClient.on("message", async (msg) => {
+    if (msg.fromMe) return;
+    
+    try {
+      const db = await getDb();
+      // Record new incoming message or update timestamp
+      await db.run(`
+        INSERT INTO unanswered_messages (chat_id, last_message_text, received_at, is_answered)
+        VALUES (?, ?, datetime('now'), 0)
+        ON CONFLICT(id) DO UPDATE SET last_message_text = excluded.last_message_text, received_at = datetime('now'), is_answered = 0
+      `, [msg.from, msg.body]);
+      
+      console.log(`[whatsapp] Nova mensagem recebida de ${msg.from}`);
+    } catch (err) {
+      console.error("[whatsapp] Erro ao registrar mensagem recebida:", err);
+    }
+  });
+
+  // Track outgoing messages to mark as answered
+  nextClient.on("message_create", async (msg) => {
+    if (!msg.fromMe) return;
+    
+    try {
+      const db = await getDb();
+      await db.run(`
+        UPDATE unanswered_messages 
+        SET is_answered = 1 
+        WHERE chat_id = ? AND is_answered = 0
+      `, [msg.to]);
+      
+      console.log(`[whatsapp] Mensagem enviada para ${msg.to}, marcando como respondido.`);
+    } catch (err) {
+      console.error("[whatsapp] Erro ao atualizar status de resposta:", err);
+    }
   });
 
   return nextClient;

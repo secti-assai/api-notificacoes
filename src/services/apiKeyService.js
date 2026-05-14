@@ -63,9 +63,31 @@ async function findActiveApiKey(rawKey) {
   return row || null;
 }
 
+async function listApiKeys() {
+  const db = await getDb();
+  return db.all("SELECT id, label, is_active, created_at FROM api_keys ORDER BY created_at DESC");
+}
+
+async function toggleApiKey(id) {
+  const db = await getDb();
+  await db.run(
+    "UPDATE api_keys SET is_active = 1 - is_active WHERE id = ?",
+    [id]
+  );
+  return db.get("SELECT * FROM api_keys WHERE id = ?", [id]);
+}
+
+async function deleteApiKey(id) {
+  const db = await getDb();
+  await db.run("DELETE FROM api_keys WHERE id = ?", [id]);
+}
+
 module.exports = {
   hashApiKey,
   createApiKey,
   findActiveApiKey,
-  validateApiKey
+  validateApiKey,
+  listApiKeys,
+  toggleApiKey,
+  deleteApiKey
 };
