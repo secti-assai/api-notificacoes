@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Notificações | Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dark-mode">
+    <div id="auth-overlay" class="overlay">
+        <div class="auth-card">
+            <h2>Acesso Restrito</h2>
+            <p>Insira seu token de administrador para continuar.</p>
+            <input type="password" id="admin-token-input" placeholder="Admin Token">
+            <button id="login-btn">Acessar Dashboard</button>
+        </div>
+    </div>
+
+    <div class="app-container hidden" id="main-app">
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-paper-plane"></i>
+                <span>Admin</span>
+            </div>
+            <nav>
+                <ul>
+                    <li class="active" data-view="dashboard"><i class="fas fa-th-large"></i> Dashboard</li>
+                    <li data-view="history"><i class="fas fa-history"></i> Histórico</li>
+                    <li data-view="api-keys"><i class="fas fa-key"></i> Chaves API</li>
+                    <li data-view="settings"><i class="fas fa-cog"></i> Configurações</li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logout-btn"><i class="fas fa-sign-out-alt"></i> Sair</button>
+            </div>
+        </aside>
+
+        <main class="content">
+            <header>
+                <h1 id="view-title">Dashboard</h1>
+                <div class="header-actions">
+                    <div class="auto-refresh-container">
+                        <label class="switch">
+                            <input type="checkbox" id="auto-refresh-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                        <span>Auto-Refresh</span>
+                    </div>
+                    <div id="connection-status" class="status-badge">
+                        <span class="dot"></span>
+                        <span class="text">WhatsApp: Verificando...</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <section id="dashboard-view" class="view">
+                <div class="stats-grid">
+                    <div class="stat-card total">
+                        <div class="icon"><i class="fas fa-envelope-open-text"></i></div>
+                        <div class="info">
+                            <h3>Total</h3>
+                            <p id="stat-total">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card sent">
+                        <div class="icon"><i class="fas fa-check-circle"></i></div>
+                        <div class="info">
+                            <h3>Enviadas</h3>
+                            <p id="stat-sent">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card failed">
+                        <div class="icon"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="info">
+                            <h3>Falhas</h3>
+                            <p id="stat-failed">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card pending">
+                        <div class="icon"><i class="fas fa-clock"></i></div>
+                        <div class="info">
+                            <h3>Pendentes</h3>
+                            <p id="stat-pending">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div class="chart-container">
+                    <div class="section-header">
+                        <h2>Volume de Envios</h2>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="dot sent"></span> Enviadas</span>
+                            <span class="legend-item"><span class="dot failed"></span> Falhas</span>
+                        </div>
+                    </div>
+                    <canvas id="stats-chart"></canvas>
+                </div>
+
+                <div class="recent-section">
+                    <div class="section-header">
+                        <h2>Notificações Recentes</h2>
+                        <button class="btn-secondary" onclick="app.switchView('history')">
+                            Ver Tudo <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Tipo</th>
+                                    <th>Destinatário</th>
+                                    <th>Status</th>
+                                    <th>Data</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-table-body">
+                                <!-- Data will be injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History View -->
+            <section id="history-view" class="view hidden">
+                <div class="filters">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="history-search" placeholder="Buscar por número, e-mail ou conteúdo...">
+                    </div>
+                    <select id="filter-status">
+                        <option value="">Todos os Status</option>
+                        <option value="sent">Enviadas</option>
+                        <option value="failed">Falhas</option>
+                        <option value="pending">Pendentes</option>
+                    </select>
+                    <button class="btn-secondary" id="export-csv-btn">
+                        <i class="fas fa-file-export"></i> Exportar CSV
+                    </button>
+                    <button class="btn-primary" id="refresh-history">
+                        <i class="fas fa-sync"></i> Atualizar
+                    </button>
+                    <button class="btn-danger" id="resend-failed-btn">
+                        <i class="fas fa-redo"></i> Reenviar Falhas
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tipo</th>
+                                <th>Destinatário</th>
+                                <th>Assunto</th>
+                                <th>Status</th>
+                                <th>Tentativas</th>
+                                <th>Data</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <!-- Data will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <button id="prev-page" class="btn-secondary" disabled>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <span id="page-info">Página 1 de 1</span>
+                <button id="next-page" class="btn-secondary" disabled>
+                    Próxima <i class="fas fa-chevron-right"></i>
+                </button>
+                </div>
+            </section>
+
+            <!-- API Keys View -->
+            <section id="api-keys-view" class="view hidden">
+                <div class="section-header">
+                    <h2>Gerenciar Chaves API</h2>
+                    <button class="btn-primary" id="create-key-btn">
+                        <i class="fas fa-plus"></i> Nova Chave
+                    </button>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome / Label</th>
+                                <th>Status</th>
+                                <th>Criada em</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="keys-table-body">
+                            <!-- Keys injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="settings-view" class="view hidden">
+                <div class="form-card">
+                    <h2>Configurações do Sistema</h2>
+                    <form id="settings-form">
+                        <div class="form-group">
+                            <label>Tempo de espera para Follow-up (minutos)</label>
+                            <input type="number" id="set-followup-delay" min="1" max="1440" required>
+                            <small>Tempo que o sistema espera uma resposta antes de enviar o lembrete automático.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Mensagem de Follow-up Automático</label>
+                            <textarea id="set-followup-message" required></textarea>
+                            <small>Texto que será enviado ao cliente.</small>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-save"></i> Salvar Configurações
+                        </button>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Message Details Modal -->
+    <div id="message-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-info-circle"></i> Detalhes da Notificação</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-row">
+                    <strong>ID:</strong> <span id="modal-id"></span>
+                </div>
+                <div class="detail-row">
+                    <strong>Destinatário:</strong> <span id="modal-to"></span>
+                </div>
+                <div class="detail-row">
+                    <strong>Tipo:</strong> <span id="modal-type"></span>
+                </div>
+                <div class="detail-row">
+                    <strong>Status:</strong> <span id="modal-status"></span>
+                </div>
+                <div class="detail-row">
+                    <strong>Criado em:</strong> <span id="modal-date"></span>
+                </div>
+                <hr>
+                <div class="detail-content">
+                    <strong>Assunto:</strong>
+                    <div id="modal-subject" class="content-box"></div>
+                </div>
+                <div class="detail-content">
+                    <strong>Mensagem:</strong>
+                    <div id="modal-body" class="content-box"></div>
+                </div>
+                <div id="modal-error-container" class="detail-content hidden">
+                    <strong>Último Erro:</strong>
+                    <div id="modal-error" class="content-box error"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary close-modal">Fechar</button>
+                <button class="btn-primary" id="modal-resend-btn">Reenviar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

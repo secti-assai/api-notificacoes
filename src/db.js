@@ -68,6 +68,27 @@ async function initializeSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_notifications_status_created_at
       ON notifications (status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS unanswered_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id TEXT NOT NULL,
+      last_message_text TEXT,
+      received_at TEXT NOT NULL DEFAULT (datetime('now')),
+      is_answered INTEGER NOT NULL DEFAULT 0,
+      notified_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_unanswered_chat_id
+      ON unanswered_messages (chat_id);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    -- Default settings
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('followup_delay_minutes', '5');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('followup_message', 'Olá! Vimos que você nos enviou uma mensagem e ainda não conseguimos responder. Em breve um de nossos atendentes falará com você. Obrigado pela paciência!');
   `);
 
   await ensureColumnExists(db, "notifications", "api_key_id", "INTEGER");

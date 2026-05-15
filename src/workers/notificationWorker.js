@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const config = require("../config");
-const { processDueNotifications } = require("../services/notificationService");
+const { processDueNotifications, processAutomaticFollowups } = require("../services/notificationService");
 
 function startNotificationWorker() {
   let isRunning = false;
@@ -13,6 +13,7 @@ function startNotificationWorker() {
 
     isRunning = true;
     try {
+      await processAutomaticFollowups();
       const summary = await processDueNotifications();
       if (summary.processed > 0) {
         console.log("[worker] Summary:", summary);
